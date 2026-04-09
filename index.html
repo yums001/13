@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>13 months · firefly jar</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: #0b0a1a;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: 'Segoe UI', 'Roboto', system-ui, sans-serif;
+      padding: 16px;
+    }
+
+    .container {
+      position: relative;
+      width: 100%;
+      max-width: 560px;
+      aspect-ratio: 1 / 1.2;
+      border-radius: 48px;
+      background: #110e1f;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 180, 255, 0.15);
+      overflow: hidden;
+      backdrop-filter: blur(2px);
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;  /* prevents scroll while interacting */
+      cursor: pointer;
+    }
+
+    .message-overlay {
+      position: absolute;
+      bottom: 20px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      pointer-events: none;
+      color: #ffe9f0;
+      text-shadow: 0 0 15px #ff66aa, 0 0 30px #b44d88;
+      font-weight: 400;
+      letter-spacing: 2px;
+      transition: opacity 1.2s ease;
+      z-index: 10;
+    }
+
+    .main-message {
+      font-size: 1.4rem;
+      font-weight: 300;
+      word-spacing: 4px;
+    }
+
+    .sub-message {
+      font-size: 0.9rem;
+      margin-top: 6px;
+      opacity: 0.8;
+      color: #f0cee0;
+    }
+
+    .click-hint {
+      position: absolute;
+      top: 20px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      color: #e4c1d9;
+      font-size: 0.9rem;
+      pointer-events: none;
+      opacity: 0.8;
+      transition: opacity 0.5s;
+      text-shadow: 0 0 8px #a15b7c;
+      z-index: 10;
+    }
+
+    .hidden-message {
+      position: absolute;
+      top: 45%;
+      left: 0;
+      right: 0;
+      text-align: center;
+      color: #fff0f5;
+      font-size: 1.6rem;
+      font-weight: 300;
+      text-shadow: 0 0 25px #ffaad4, 0 0 40px #c1549c;
+      opacity: 0;
+      transition: opacity 2.5s ease;
+      pointer-events: none;
+      z-index: 20;
+      background: linear-gradient(90deg, #ffe5f0, #ffd0e8);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      letter-spacing: 2px;
+    }
+
+    .hidden-message span {
+      display: block;
+      font-size: 1rem;
+      margin-top: 12px;
+      color: #ffd9ec;
+      -webkit-background-clip: unset;
+      background-clip: unset;
+      color: #f8d0e3;
+      text-shadow: 0 0 15px #b3457a;
+    }
+
+    .restart-btn {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      background: rgba(20, 12, 30, 0.6);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 190, 230, 0.4);
+      color: #ffd9ec;
+      padding: 8px 16px;
+      border-radius: 40px;
+      font-size: 0.8rem;
+      font-weight: 300;
+      letter-spacing: 1px;
+      pointer-events: auto;
+      cursor: pointer;
+      transition: all 0.3s;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      z-index: 25;
+      opacity: 0;
+      transition: opacity 1s;
+    }
+
+    .restart-btn:hover {
+      background: rgba(60, 30, 70, 0.7);
+      border-color: #ffb0d9;
+      color: #fff0fa;
+      box-shadow: 0 0 15px #ff88bb;
+    }
+
+    .restart-btn.show {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <canvas id="fireflyCanvas" width="560" height="672"></canvas>
+
+  <!-- hints and messages -->
+  <div class="click-hint" id="hintText">✨ 13 months · 13 fireflies ✨</div>
+  <div class="message-overlay" id="jarMessage">
+    <div class="main-message">naipon sa bawat buwan</div>
+    <div class="sub-message">tap the jar to release</div>
+  </div>
+
+  <div class="hidden-message" id="finalMessage">
+    litmatch · 13 months<br>
+    <span>— soon, sabay na tayong manood —</span>
+  </div>
+
+  <button class="restart-btn" id="restartButton">↻ light again</button>
+</div>
+
+<script>
+  (function(){
+    "use strict";
+
+    const canvas = document.getElementById('fireflyCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // UI elements
+    const hintText = document.getElementById('hintText');
+    const jarMessage = document.getElementById('jarMessage');
+    const finalMessageDiv = document.getElementById('finalMessage');
+    const restartBtn = document.getElementById('restartButton');
+
+    // Dimensions (matching CSS aspect ratio)
+    let w = 560, h = 672;
+    
+    // App state
+    const STATE = {
+      JAR: 'jar',           // fireflies inside jar
+      RELEASING: 'releasing', // transition / flying out
+      FIREWORKS: 'fireworks', // active fireworks
+      DONE: 'done'           // after finale, show message
+    };
+    let currentState = STATE.JAR;
+    
+    // Jar interaction
+    let jarClicked = false;
+    let releaseProgress = 0.0;        // 0 -> 1 for transition
+    let fireworksActive = false;
+    let fireworksParticles = [];
+    let fireflies = [];
+    let finaleLaunched = false;
+    let showFinalMessage = false;
+    let finalMessageOpacity = 0.0;
+
+    // Fireworks parameters
+    const GRAVITY = 0.08;
+    const FIREWORK_COUNT = 13;  // one per month
+    
+    // Litmatch color palette (soft pinks, purples, gold accents)
+    const litmatchColors = [
+      '#FFB3C6', '#FFC2D1', '#FFD6E0', // soft pinks
+      '#E0B0FF', '#C77DFF', '#B57EDC', // purples
+      '#FADADD', '#FFDAB9', '#FFF0D4', // warm peach
+      '#D9B8E0', '#F4C2C2', '#FFB7C5', 
+      '#E6B8FF', '#FFC0CB', '#DDA0DD'
+    ];
+
+    // ----- helper: random range
+    const rand = (min, max) => Math.random() * (max - min) + min;
+    const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+    // ----- initialize fireflies inside jar (13 glowing dots)
+    function initFireflies() {
+      fireflies = [];
+      for (let i = 0; i < 13; i++) {
+        fireflies.push({
+          // position within jar bounds (jar drawn around center)
+          x: rand(w * 0.35, w * 0.65),
+          y: rand(h * 0.55, h * 0.78),
+          vx: rand(-0.12, 0.12),
+          vy: rand(-0.08, 0.05),
+          size: rand(4.5, 8.0),
+          glowSize: rand(12, 20),
+          color: litmatchColors[randInt(0, litmatchColors.length-1)],
+          phase: rand(0, 100),
+        });
+      }
+    }
+
+    // ----- reset everything to jar state
+    function resetToJar() {
+      currentState = STATE.JAR;
+      jarClicked = false;
+      releaseProgress = 0.0;
+      fireworksActive = false;
+      fireworksParticles = [];
+      finaleLaunched = false;
+      showFinalMessage = false;
+      finalMessageOpacity = 0.0;
+      initFireflies();
+      
+      // UI
+      hintText.style.opacity = '0.8';
+      jarMessage.style.opacity = '1';
+      finalMessageDiv.style.opacity = '0';
+      restartBtn.classList.remove('show');
+      canvas.style.cursor = 'pointer';
+    }
+
+    // ----- transition: fireflies escape and become rockets
+    function startRelease() {
+      if (currentState !== STATE.JAR) return;
+      currentState = STATE.RELEASING;
+      jarClicked = true;
+      canvas.style.cursor = 'default';
+      hintText.style.opacity = '0.3';
+      jarMessage.style.opacity = '0.5';
+    }
+
+    // ----- generate a firework explosion (Litmatch soft effect)
+    function createFireworkExplosion(baseX, baseY, colorHint = null) {
+      const color = colorHint || litmatchColors[Math.floor(Math.random() * litmatchColors.length)];
+      const particleCount = randInt(42, 68);
+      for (let i = 0; i < particleCount; i++) {
+        const angle = rand(0, Math.PI * 2);
+        const speed = rand(1.8, 5.2);
+        const vx = Math.cos(angle) * speed;
+        const vy = Math.sin(angle) * speed - rand(0.3, 1.2); // upward bias
+        
+        fireworksParticles.push({
+          x: baseX, y: baseY,
+          vx: vx, vy: vy,
+          size: rand(2.8, 5.5),
+          color: color,
+          alpha: rand(0.9, 1.0),
+          life: 1.0,
+          decay: rand(0.008, 0.018),
+          blur: rand(8, 16),
+          trail: [],
+        });
+      }
+      // extra tiny sparkles
+      for (let i=0;i<12;i++) {
+        fireworksParticles.push({
+          x: baseX, y: baseY,
+          vx: rand(-2.5, 2.5), vy: rand(-3.5, 0.5),
+          size: rand(1.5, 3.2),
+          color: '#FFF5E1',
+          alpha: 1.0,
+          life: 1.0,
+          decay: 0.012,
+          blur: 10,
+          trail: [],
+        });
+      }
+    }
+
+    // ----- generate grand finale: 13 bursts (one per month) with message
+    function triggerFinale() {
+      if (finaleLaunched) return;
+      finaleLaunched = true;
+      
+      // create 13 beautiful bursts across the sky
+      const positions = [];
+      for (let i=0; i<13; i++) {
+        let x = rand(w*0.15, w*0.85);
+        let y = rand(h*0.2, h*0.6);
+        // avoid overlapping too much, but it's fine
+        positions.push({x, y, color: litmatchColors[i % litmatchColors.length]});
+      }
+      
+      // also extra bursts to fill
+      for (let i=0; i<8; i++) {
+        positions.push({
+          x: rand(w*0.1, w*0.9),
+          y: rand(h*0.1, h*0.5),
+          color: litmatchColors[randInt(0, litmatchColors.length-1)]
+        });
+      }
+      
+      positions.forEach(pos => {
+        createFireworkExplosion(pos.x, pos.y, pos.color);
+      });
+      
+      // show final message after a short delay
+      setTimeout(() => {
+        showFinalMessage = true;
+      }, 1800);
+    }
+
+    // ----- update fireflies (bobbing inside jar)
+    function updateFireflies() {
+      for (let f of fireflies) {
+        f.x += f.vx;
+        f.y += f.vy;
+        
+        // soft boundaries (jar shape)
+        const jarLeft = w*0.28, jarRight = w*0.72;
+        const jarTop = h*0.48, jarBottom = h*0.82;
+        
+        if (f.x < jarLeft) { f.x = jarLeft; f.vx *= -0.5; }
+        if (f.x > jarRight) { f.x = jarRight; f.vx *= -0.5; }
+        if (f.y < jarTop) { f.y = jarTop; f.vy *= -0.3; }
+        if (f.y > jarBottom) { f.y = jarBottom; f.vy *= -0.4; }
+        
+        // slight random drift
+        f.vx += rand(-0.02, 0.02);
+        f.vy += rand(-0.015, 0.015);
+        
+        // limit speed
+        const maxSpeed = 0.35;
+        let sp = Math.hypot(f.vx, f.vy);
+        if (sp > maxSpeed) {
+          f.vx *= maxSpeed/sp;
+          f.vy *= maxSpeed/sp;
+        }
+        
+        f.phase += 0.02;
+      }
+    }
+
+    // ----- update releasing: fireflies fly upward out of jar
+    function updateReleasing() {
+      releaseProgress = Math.min(releaseProgress + 0.008, 1.0);
+      
+      for (let f of fireflies) {
+        // move upward with increasing speed
+        f.vy -= 0.018;
+        f.vx += (Math.random() - 0.5) * 0.04;
+        f.x += f.vx;
+        f.y += f.vy;
+        
+        // fade a bit as they leave
+        // size shrinks slightly
+      }
+      
+      // when progress near 1, transition to fireworks
+      if (releaseProgress >= 0.98 && !fireworksActive) {
+        // Convert each firefly into a rocket trail / explosion
+        fireworksActive = true;
+        currentState = STATE.FIREWORKS;
+        
+        // create initial explosions at the positions where fireflies ended
+        fireflies.forEach(f => {
+          if (f.y < h*0.3) {
+            createFireworkExplosion(f.x, f.y, f.color);
+          } else {
+            // create a burst slightly higher
+            createFireworkExplosion(f.x, f.y - 40, f.color);
+          }
+        });
+        
+        // schedule the grand finale after some delay
+        setTimeout(() => {
+          triggerFinale();
+        }, 1500);
+      }
+    }
+
+    // ----- update fireworks particles (soft, Litmatch-like)
+    function updateFireworks() {
+      for (let i = fireworksParticles.length-1; i>=0; i--) {
+        const p = fireworksParticles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += GRAVITY * 0.5; // softer gravity
+        p.vx *= 0.99;
+        p.vy *= 0.99;
+        p.life -= p.decay;
+        p.alpha = p.life * 0.9;
+        
+        // add to trail for glow effect (only keep a few)
+        if (p.life > 0.2) {
+          p.trail.push({x: p.x, y: p.y, alpha: p.alpha*0.4});
+          if (p.trail.length > 5) p.trail.shift();
+        }
+        
+        if (p.life <= 0.02 || p.y > h+30 || p.x < -30 || p.x > w+30) {
+          fireworksParticles.splice(i,1);
+        }
+      }
+      
+      // If fireworks active but no particles left and finale launched, go to DONE
+      if (fireworksActive && fireworksParticles.length === 0 && finaleLaunched) {
+        currentState = STATE.DONE;
+        restartBtn.classList.add('show');
+      }
+      
+      // Occasionally add extra ambient sparkles during fireworks
+      if (fireworksActive && Math.random() < 0.08 && fireworksParticles.length < 150) {
+        const x = rand(w*0.1, w*0.9);
+        const y = rand(h*0.1, h*0.5);
+        createFireworkExplosion(x, y, litmatchColors[randInt(0, litmatchColors.length-1)]);
+      }
+    }
+
+    // ----- update final message fade
+    function updateFinalMessage() {
+      if (showFinalMessage && finalMessageOpacity < 1.0) {
+        finalMessageOpacity = Math.min(finalMessageOpacity + 0.008, 1.0);
+        finalMessageDiv.style.opacity = finalMessageOpacity;
+      }
+      if (currentState === STATE.DONE) {
+        restartBtn.classList.add('show');
+      }
+    }
+
+    // ----- drawing functions -----
+    function drawBackground() {
+      // deep night sky gradient
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, '#0e0a1c');
+      grad.addColorStop(0.7, '#1b1330');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+      
+      // faint stars
+      ctx.fillStyle = '#fff9e6';
+      for (let i=0; i<60; i++) {
+        if (i%2 === 0) continue; // pseudo random
+        let sx = (i*23 % w), sy = (i*17 % h);
+        ctx.globalAlpha = 0.4 + 0.3 * Math.sin(Date.now()*0.001 + i);
+        ctx.beginPath();
+        ctx.arc(sx, sy, 1.2, 0, Math.PI*2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1.0;
+    }
+
+    function drawJar() {
+      // glass jar outline
+      ctx.save();
+      ctx.shadowColor = '#b38b9d';
+      ctx.shadowBlur = 18;
+      ctx.shadowOffsetY = 2;
+      
+      // jar body
+      ctx.beginPath();
+      ctx.ellipse(w/2, h*0.65, w*0.22, h*0.18, 0, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(30, 20, 40, 0.25)';
+      ctx.fill();
+      ctx.shadowBlur = 12;
+      ctx.strokeStyle = '#bda0b5';
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([]);
+      ctx.stroke();
+      
+      // jar neck
+      ctx.beginPath();
+      ctx.ellipse(w/2, h*0.48, w*0.12, h*0.05, 0, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(40, 25, 50, 0.3)';
+      ctx.fill();
+      ctx.strokeStyle = '#c8aec2';
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+      
+      // lid (cork)
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.ellipse(w/2, h*0.44, w*0.13, h*0.04, 0, 0, Math.PI*2);
+      ctx.fillStyle = '#6e4d5e';
+      ctx.fill();
+      ctx.strokeStyle = '#957386';
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+      
+      // inner glow
+      ctx.shadowBlur = 25;
+      ctx.shadowColor = '#ffb0d0';
+      ctx.beginPath();
+      ctx.ellipse(w/2, h*0.62, w*0.16, h*0.13, 0, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(70, 30, 60, 0.2)';
+      ctx.fill();
+      
+      ctx.restore();
+      
+      // jar label hint
+      ctx.font = "12px 'Segoe UI', sans-serif";
+      ctx.fillStyle = '#dbb6cc';
+      ctx.shadowColor = '#c97aa8';
+      ctx.shadowBlur = 8;
+      ctx.textAlign = "center";
+      ctx.fillText("13", w/2, h*0.72);
+      ctx.shadowBlur = 0;
+    }
+
+    function drawFireflies() {
+      for (let f of fireflies) {
+        // soft glow
+        ctx.shadowColor = f.color;
+        ctx.shadowBlur = f.glowSize + 4 * Math.sin(Date.now()*0.005 + f.phase);
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, f.size * 0.7, 0, 2*Math.PI);
+        ctx.fillStyle = f.color;
+        ctx.fill();
+        
+        // inner bright core
+        ctx.shadowBlur = f.glowSize * 1.2;
+        ctx.beginPath();
+        ctx.arc(f.x-1, f.y-1, f.size*0.4, 0, 2*Math.PI);
+        ctx.fillStyle = '#FFF9F0';
+        ctx.fill();
+        
+        // tiny spark
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, 1.8, 0, 2*Math.PI);
+        ctx.fillStyle = 'white';
+        ctx.fill();
+      }
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = 'transparent';
+    }
+
+    function drawFireworks() {
+      for (let p of fireworksParticles) {
+        // draw trail
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = p.blur;
+        for (let t of p.trail) {
+          ctx.globalAlpha = t.alpha * 0.25;
+          ctx.beginPath();
+          ctx.arc(t.x, t.y, p.size*0.6, 0, 2*Math.PI);
+          ctx.fillStyle = p.color;
+          ctx.fill();
+        }
+        
+        ctx.globalAlpha = p.alpha * 0.9;
+        ctx.shadowBlur = p.blur * 1.2;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, 2*Math.PI);
+        ctx.fillStyle = p.color;
+        ctx.fill();
+        
+        // bright center
+        ctx.shadowBlur = p.blur * 1.8;
+        ctx.globalAlpha = p.alpha;
+        ctx.beginPath();
+        ctx.arc(p.x-1, p.y-1, p.size*0.45, 0, 2*Math.PI);
+        ctx.fillStyle = '#FFF5EE';
+        ctx.fill();
+      }
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1.0;
+    }
+
+    function drawLitmatchSignature() {
+      if (currentState === STATE.FIREWORKS || currentState === STATE.DONE) {
+        ctx.font = "300 14px 'Segoe UI', cursive";
+        ctx.fillStyle = '#f2c4dc';
+        ctx.shadowColor = '#ff80b3';
+        ctx.shadowBlur = 14;
+        ctx.textAlign = "center";
+        ctx.fillText("✨ litmatch · 13 months ✨", w/2, h-28);
+        ctx.shadowBlur = 0;
+      }
+    }
+
+    // ----- main render
+    function draw() {
+      drawBackground();
+      
+      if (currentState === STATE.JAR || currentState === STATE.RELEASING) {
+        drawJar();
+        drawFireflies();
+        if (currentState === STATE.RELEASING) {
+          // additional effect: soft particle trails rising
+          ctx.globalAlpha = 0.4;
+        }
+      }
+      
+      if (currentState === STATE.FIREWORKS || currentState === STATE.DONE) {
+        drawFireworks();
+        drawLitmatchSignature();
+      }
+      
+      // if releasing but some fireflies still visible, draw them above jar
+      if (currentState === STATE.RELEASING) {
+        drawFireflies();
+      }
+      
+      // overlay text adjustments
+    }
+
+    // ----- animation loop
+    function update() {
+      if (currentState === STATE.JAR) {
+        updateFireflies();
+      } else if (currentState === STATE.RELEASING) {
+        updateReleasing();
+        updateFireflies(); // they still move
+      } else if (currentState === STATE.FIREWORKS) {
+        updateFireworks();
+      } else if (currentState === STATE.DONE) {
+        // nothing to update, just message
+      }
+      updateFinalMessage();
+      
+      draw();
+      requestAnimationFrame(update);
+    }
+
+    // ----- handle click / tap (release jar)
+    function handleCanvasClick(e) {
+      if (currentState === STATE.JAR) {
+        startRelease();
+      }
+    }
+
+    // ----- restart
+    function restartExperience() {
+      resetToJar();
+    }
+
+    // ----- resize canvas (maintain aspect)
+    function resizeCanvas() {
+      const container = canvas.parentElement;
+      const containerWidth = container.clientWidth;
+      const containerHeight = container.clientHeight;
+      
+      // we keep internal w,h as 560x672 for drawing reference, but scale with CSS
+      // canvas dimensions stay fixed for crispness
+      canvas.width = 560;
+      canvas.height = 672;
+      w = 560; h = 672;
+    }
+
+    // ----- initialize
+    function init() {
+      resizeCanvas();
+      resetToJar();
+      
+      canvas.addEventListener('click', handleCanvasClick);
+      restartBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        restartExperience();
+      });
+      
+      // start animation
+      update();
+      
+      window.addEventListener('resize', () => {
+        // just redraw, no need to change internal coords
+      });
+    }
+
+    init();
+  })();
+</script>
+</body>
+</html>
