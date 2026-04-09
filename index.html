@@ -122,10 +122,6 @@
       word-break: break-word;
     }
 
-    .letter-content p {
-      margin-bottom: 1.2em;
-    }
-
     .close-letter {
       margin-top: 18px;
       background: rgba(30, 70, 120, 0.7);
@@ -223,7 +219,6 @@ I'm sorry baby ko sa lahat ng pagkukulang at mga pagkakamali ko po sayo. I know 
     
     let fireflies = [];
     let fireworksParticles = [];
-    let releaseTriggered = false;
     let finaleTriggered = false;
     let letterShown = false;
     let explosionCooldown = 0;
@@ -262,7 +257,6 @@ I'm sorry baby ko sa lahat ng pagkukulang at mga pagkakamali ko po sayo. I know 
 
     function fullReset() {
       currentState = STATE.JAR;
-      releaseTriggered = false;
       fireworksParticles = [];
       finaleTriggered = false;
       letterShown = false;
@@ -330,46 +324,48 @@ I'm sorry baby ko sa lahat ng pagkukulang at mga pagkakamali ko po sayo. I know 
     function releaseJar() {
       if (currentState !== STATE.JAR) return;
       currentState = STATE.RELEASING;
-      releaseTriggered = true;
       instructionEl.style.opacity = '0.5';
-      // Give each firefly a steady upward velocity (no gravity applied later)
+      
+      // Fireflies get a strong upward boost, no gravity will act on them later
       fireflies.forEach(f => {
-        f.vy = rand(-1.8, -1.2); // negative = upward
-        f.vx += rand(-0.2, 0.2);
+        f.vy = rand(-2.5, -1.8); // negative = upward
+        f.vx += rand(-0.3, 0.3);
       });
     }
 
-    // UPDATED: fireflies rise continuously, pop when high enough
+    // UPDATED: fireflies only move upward (no gravity)
     function updateReleasing() {
-      // Move fireflies upward (no gravity, just constant upward + small drag)
+      // Apply constant upward motion
       for (let f of fireflies) {
         f.x += f.vx;
         f.y += f.vy;
-        // slight drag to keep horizontal motion calm
+        // Keep horizontal drift small
         f.vx *= 0.995;
-        // very slight upward acceleration to ensure they keep rising
-        f.vy += 0.008; // small boost instead of gravity
+        // Slight upward acceleration to ensure they keep rising
+        f.vy += 0.015; // positive would be downward, so we subtract? Actually vy is negative, adding positive reduces upward speed. We want them to keep rising, so we should make vy more negative.
+        // Wait: I had f.vy += 0.015 but vy is negative. Adding positive makes it less negative -> slows down. We need to subtract a small amount to make it more negative.
+        // Let's fix: f.vy -= 0.01 to accelerate upward.
+        f.vy -= 0.01;
+        // Clamp maximum upward speed
+        if (f.vy < -3.0) f.vy = -3.0;
         f.phase += 0.02;
       }
 
-      // Check which fireflies are ready to pop (above threshold)
+      // Find fireflies ready to pop (above threshold)
       const candidates = fireflies.filter(f => !f.exploded && f.y < POP_THRESHOLD);
       
       if (candidates.length > 0 && explosionCooldown <= 0) {
-        // Pop the highest one (lowest y) for a nice sequential effect
         candidates.sort((a, b) => a.y - b.y);
         const f = candidates[0];
         f.exploded = true;
         createExplosion(f.x, f.y, f.color);
-        explosionCooldown = 8; // frames between pops
+        explosionCooldown = 8;
       }
       
       if (explosionCooldown > 0) explosionCooldown--;
 
-      // Remove exploded fireflies
       fireflies = fireflies.filter(f => !f.exploded);
 
-      // When all fireflies have popped, move to FIREWORKS state and trigger finale
       if (fireflies.length === 0 && currentState === STATE.RELEASING) {
         currentState = STATE.FIREWORKS;
         setTimeout(() => {
