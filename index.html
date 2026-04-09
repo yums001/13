@@ -42,7 +42,6 @@
       cursor: pointer;
     }
 
-    /* simple overlay text */
     .instruction {
       position: absolute;
       bottom: 22px;
@@ -61,7 +60,6 @@
       word-break: break-word;
     }
 
-    /* love letter modal */
     .letter-overlay {
       position: absolute;
       top: 0;
@@ -187,22 +185,17 @@
 <div class="container">
   <canvas id="fireflyCanvas" width="500" height="600"></canvas>
 
-  <!-- single instruction line -->
   <div class="instruction" id="instructionText">
     Happy 13th courtsary my baby, I have 13 fireflies for you po, open it my surprise po ikaww 💙
   </div>
 
-  <!-- LOVE LETTER (hidden until after fireworks) -->
   <div class="letter-overlay" id="loveLetterOverlay">
     <div class="letter-card">
-      <div class="letter-content" id="messageContent">
-        <!-- filled by JS -->
-      </div>
+      <div class="letter-content" id="messageContent"></div>
     </div>
     <button class="close-letter" id="closeLetterBtn">close & read again 💙</button>
   </div>
 
-  <!-- restart button -->
   <div class="restart-icon" id="restartButton">↻</div>
 </div>
 
@@ -211,86 +204,78 @@
     "use strict";
 
     const canvas = document.getElementById('fireflyCanvas');
-    const ctx = canvas.getContext('2d', { alpha: false }); // alpha false for perf
+    const ctx = canvas.getContext('2d', { alpha: false });
+    const W = 500, H = 600;
+    canvas.width = W; canvas.height = H;
 
-    // UI elements
     const instructionEl = document.getElementById('instructionText');
     const letterOverlay = document.getElementById('loveLetterOverlay');
     const messageContent = document.getElementById('messageContent');
     const restartBtn = document.getElementById('restartButton');
     const closeLetterBtn = document.getElementById('closeLetterBtn');
 
-    // Fixed dimensions (500x600)
-    const W = 500, H = 600;
-    canvas.width = W;
-    canvas.height = H;
-
-    // --- THE LONG MESSAGE (exactly as requested) ---
     const LONG_MESSAGE = `Hi po baby koooo happyyy 13th courtsary to ussss🥺 Grabe baby 1 year and 1 month na po akong nanliligaw po sayooo. At first di po ako makapaniwala na papayagan mo po ako manligaw eh kasi sino ba naman ako diba like di naman ako katalinuhan at wala rin naman itsura(yes po baby I know po that you'll say na di po totoo na di ako matalino and di ako pogi, so yes yes opo ikaw po masusunod^^). Still you let me prove that I'll be the one not just for a short time but for a lifetime. I will never get tired of waiting mahal ko haaa, I know you are still not ready and i'm not pressuring you to say "yes" to me. Label can wait, but I can't wait to see you in person baby ko🥺. Para maipadama ko pa lalo yung pagmamahal na gusto kong ibigay sayo. Mahal ko kahit kailan di po ako mag sasawang intindihin ka po haa kahit na dumating sa point na di na po tayo mag kaintindihan, I will stay and still try to understand you my love love🥺 and baby ko wag ka po sanang mag sawang intindihin ako haa, i'm trying my best to be better for you baby kooo. Baby I know I don't say it often but I just want you to know that you're so important to me, to the point you've become one of my top priorities. Di naman ako ganto dati eh, you've changed me a lot in a good way baby. Inalis mo yung dating ako na may bad habits, I could really tell that I was more happy now than before I met you Kaya baby i'm so very thankful that dumating ka sa buhay ko, it feels like a superhero movie eh and ikaw yung superhero ko na niligtas ako sa kadiliman ng buhay ko🥺. You made my life easier and lighter simula nung dumating ka po sa buhay ko🥺. I was wondering what would happen if di kita nakilala, maybe i'm still that old self doing things recklessly and not matured enough to fix myself. But here I am because of you baby i'm being better for myself naa, and I want to be a much better person for you as a partner. And baby, no matter what happens, I’ll always choose you. Hindi lang ngayon, kundi araw-araw. I may not be perfect, but I promise I’ll always try to love you the best way I can. I’m here for you—sa saya, sa lungkot, at sa lahat ng bagay na pagdadaanan natin. 
 
 I'm sorry baby ko sa lahat ng pagkukulang at mga pagkakamali ko po sayo. I know I've been pasaway and I do things that you don't like, pero baby I'm really trying to change and be better, not just for you, but for myself din. Ayoko na bumalik sa dati, gusto ko yung version ko ngayon na mas maayos and dahil po yun sayo🥺. Thank you baby ko for being patient with me, for understanding me kahit minsan mahirap ako intindihin. Hindi ko man nasasabi lagi, pero sobrang naa-appreciate kita sa lahat ng ginagawa mo para sa’kin. And baby, I just want you to know na hindi lang kita mahal dahil masaya tayo. Mahal kita kahit may misunderstandings, kahit may mga araw na mahirap, kasi ikaw yung pipiliin ko palagi, sa maayos man o sa magulong mundo. I’ll keep proving myself to you every single day hanggang sa dumating yung time na ready ka na. Because loving you is something I’m willing to do for a lifetime. I love youuuu so muchhhhh babyy kooo. Again, happy 13th courtsary to usss 🥺 more courtsaries to come with you, palangga ko.💙😘`;
 
-    // --- STATE ---
     const STATE = { JAR: 0, RELEASING: 1, FIREWORKS: 2, DONE: 3 };
     let currentState = STATE.JAR;
     
-    let fireflies = [];
+    let fireflies = [];            // only active ones (not yet exploded)
     let fireworksParticles = [];
-    let releaseProgress = 0.0;
+    let releaseTriggered = false;
     let finaleTriggered = false;
     let letterShown = false;
+    let explosionCooldown = 0;     // frames between auto pops
     
-    // Colors: blue theme base, fireworks colorful (including blue)
+    // colors (blue theme + colorful fireworks)
     const fireworkColors = [
       '#4da6ff', '#6eb5ff', '#2a7fff', // blues
       '#b38bff', '#d9b0ff', '#c77dff', // purples
       '#ff99cc', '#ffb3d9', '#ff85c2', // pinks
       '#7ae2ff', '#a0d6ff', '#5fc3ff', // light blues
-      '#f4a2c9', '#d0b2ff', '#ffcc99'  // warm accents
+      '#f4a2c9', '#d0b2ff', '#ffcc99'
     ];
 
-    // Optimized constants
     const GRAVITY = 0.06;
     const FIREFLY_COUNT = 13;
 
-    // ---- helpers ----
     const rand = (min, max) => Math.random() * (max - min) + min;
     const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
-    // ---- initialize fireflies inside jar ----
     function initFireflies() {
       fireflies = [];
       for (let i = 0; i < FIREFLY_COUNT; i++) {
         fireflies.push({
           x: rand(W*0.35, W*0.65),
           y: rand(H*0.58, H*0.78),
-          vx: rand(-0.1, 0.1),
-          vy: rand(-0.05, 0.05),
+          vx: rand(-0.08, 0.08),
+          vy: rand(-0.04, 0.04),
           size: rand(4.2, 7.5),
           glow: rand(10, 18),
-          color: i < 5 ? '#3d8cff' : fireworkColors[randInt(0, fireworkColors.length-1)], // some blue
-          phase: rand(0, 100)
+          color: i < 5 ? '#3d8cff' : fireworkColors[randInt(0, fireworkColors.length-1)],
+          phase: rand(0, 100),
+          exploded: false,
         });
       }
     }
 
-    // ---- reset everything ----
     function fullReset() {
       currentState = STATE.JAR;
-      releaseProgress = 0.0;
+      releaseTriggered = false;
       fireworksParticles = [];
       finaleTriggered = false;
       letterShown = false;
+      explosionCooldown = 0;
       letterOverlay.classList.remove('show');
       restartBtn.classList.remove('show');
       instructionEl.style.opacity = '1';
       initFireflies();
     }
 
-    // ---- create a soft firework explosion (optimized) ----
     function createExplosion(px, py, baseColor = null) {
       const color = baseColor || fireworkColors[Math.floor(Math.random() * fireworkColors.length)];
-      const count = randInt(28, 42); // fewer for performance
+      const count = randInt(28, 42);
       for (let i=0; i<count; i++) {
         const angle = rand(0, Math.PI*2);
         const speed = rand(1.6, 4.2);
@@ -306,7 +291,6 @@ I'm sorry baby ko sa lahat ng pagkukulang at mga pagkakamali ko po sayo. I know 
           blur: 10,
         });
       }
-      // a few extra blue sparkles
       for (let i=0; i<6; i++) {
         fireworksParticles.push({
           x: px, y: py,
@@ -318,29 +302,20 @@ I'm sorry baby ko sa lahat ng pagkukulang at mga pagkakamali ko po sayo. I know 
       }
     }
 
-    // ---- grand finale (13 bursts + blue fireworks) ----
     function triggerFinale() {
       if (finaleTriggered) return;
       finaleTriggered = true;
-      
-      // 13 main bursts
       for (let i=0; i<13; i++) {
         let x = rand(W*0.2, W*0.8);
         let y = rand(H*0.15, H*0.5);
-        let col = fireworkColors[i % fireworkColors.length];
-        createExplosion(x, y, col);
+        createExplosion(x, y, fireworkColors[i % fireworkColors.length]);
       }
-      // extra blue fireworks as requested
       for (let i=0; i<8; i++) {
         let blueShade = i%2===0 ? '#4da6ff' : '#7ab8ff';
         createExplosion(rand(W*0.15, W*0.85), rand(H*0.1, H*0.45), blueShade);
       }
-      
-      // show letter after particles settle a bit (3 secs)
       setTimeout(() => {
-        if (!letterShown) {
-          showLoveLetter();
-        }
+        if (!letterShown) showLoveLetter();
       }, 3000);
     }
 
@@ -352,49 +327,58 @@ I'm sorry baby ko sa lahat ng pagkukulang at mga pagkakamali ko po sayo. I know 
       instructionEl.style.opacity = '0.3';
     }
 
-    // ---- start release ----
     function releaseJar() {
       if (currentState !== STATE.JAR) return;
       currentState = STATE.RELEASING;
+      releaseTriggered = true;
       instructionEl.style.opacity = '0.5';
+      // give each firefly an upward boost and random horizontal drift
+      fireflies.forEach(f => {
+        f.vy = rand(-2.2, -1.8);   // strong upward
+        f.vx += rand(-0.3, 0.3);
+      });
     }
 
-    // ---- update logic ----
-    function updateJar() {
+    // ---- UPDATE: sequential popping ----
+    function updateReleasing() {
+      // move fireflies upward
       for (let f of fireflies) {
         f.x += f.vx;
         f.y += f.vy;
-        // boundaries inside jar
-        const left = W*0.28, right = W*0.72, top = H*0.48, bottom = H*0.82;
-        if (f.x < left) { f.x = left; f.vx *= -0.3; }
-        if (f.x > right) { f.x = right; f.vx *= -0.3; }
-        if (f.y < top) { f.y = top; f.vy *= -0.2; }
-        if (f.y > bottom) { f.y = bottom; f.vy *= -0.3; }
-        f.vx += rand(-0.01, 0.01);
-        f.vy += rand(-0.01, 0.01);
-        const maxSpeed = 0.3;
-        let sp = Math.hypot(f.vx, f.vy);
-        if (sp > maxSpeed) { f.vx *= maxSpeed/sp; f.vy *= maxSpeed/sp; }
+        // slight gravity / drag
+        f.vy += 0.015;
+        f.vx *= 0.995;
         f.phase += 0.02;
       }
-    }
 
-    function updateReleasing() {
-      releaseProgress = Math.min(releaseProgress + 0.006, 1.0);
+      // check for fireflies that are high enough to pop
+      const toExplode = [];
       for (let f of fireflies) {
-        f.vy -= 0.022;
-        f.vx += (Math.random()-0.5)*0.03;
-        f.x += f.vx;
-        f.y += f.vy;
+        if (!f.exploded && f.y < H * 0.28) {
+          toExplode.push(f);
+        }
       }
-      if (releaseProgress >= 0.98 && currentState === STATE.RELEASING) {
+
+      // pop them one per frame (or with small cooldown) for sequential effect
+      if (toExplode.length > 0 && explosionCooldown <= 0) {
+        // pick the highest one first (or just first)
+        const f = toExplode[0];
+        f.exploded = true;
+        createExplosion(f.x, f.y, f.color);
+        explosionCooldown = 6; // frames between pops
+      }
+      if (explosionCooldown > 0) explosionCooldown--;
+
+      // remove exploded fireflies from array
+      fireflies = fireflies.filter(f => !f.exploded);
+
+      // if all fireflies gone, transition to FIREWORKS (but wait for particles)
+      if (fireflies.length === 0 && currentState === STATE.RELEASING) {
         currentState = STATE.FIREWORKS;
-        // create initial pops from fireflies
-        fireflies.forEach(f => {
-          if (f.y < H*0.4) createExplosion(f.x, f.y, f.color);
-          else createExplosion(f.x, f.y-30, f.color);
-        });
-        setTimeout(() => triggerFinale(), 1200);
+        // small delay then finale
+        setTimeout(() => {
+          if (!finaleTriggered) triggerFinale();
+        }, 800);
       }
     }
 
@@ -412,27 +396,37 @@ I'm sorry baby ko sa lahat ng pagkukulang at mga pagkakamali ko po sayo. I know 
           fireworksParticles.splice(i,1);
         }
       }
-      
-      // occasional ambient sparkles during show
-      if (currentState === STATE.FIREWORKS && Math.random()<0.04 && fireworksParticles.length<100) {
-        createExplosion(rand(W*0.1,W*0.9), rand(H*0.1,0.5), '#6eb5ff');
-      }
-      
       if (currentState === STATE.FIREWORKS && fireworksParticles.length === 0 && finaleTriggered) {
         currentState = STATE.DONE;
         restartBtn.classList.add('show');
       }
     }
 
-    // ---- drawing (blue theme, optimized) ----
+    function updateJar() {
+      for (let f of fireflies) {
+        f.x += f.vx;
+        f.y += f.vy;
+        const left = W*0.28, right = W*0.72, top = H*0.48, bottom = H*0.82;
+        if (f.x < left) { f.x = left; f.vx *= -0.3; }
+        if (f.x > right) { f.x = right; f.vx *= -0.3; }
+        if (f.y < top) { f.y = top; f.vy *= -0.2; }
+        if (f.y > bottom) { f.y = bottom; f.vy *= -0.3; }
+        f.vx += rand(-0.01, 0.01);
+        f.vy += rand(-0.01, 0.01);
+        const maxSpeed = 0.3;
+        let sp = Math.hypot(f.vx, f.vy);
+        if (sp > maxSpeed) { f.vx *= maxSpeed/sp; f.vy *= maxSpeed/sp; }
+        f.phase += 0.02;
+      }
+    }
+
+    // ---- drawing (blue theme) ----
     function drawBackground() {
       const grad = ctx.createLinearGradient(0,0,0,H);
       grad.addColorStop(0, '#07101e');
       grad.addColorStop(0.7, '#0e1a30');
       ctx.fillStyle = grad;
       ctx.fillRect(0,0,W,H);
-      
-      // subtle stars
       ctx.fillStyle = '#c3ddff';
       for (let i=0;i<45;i++) {
         let sx = (i*23)%W, sy = (i*17)%H;
@@ -448,7 +442,6 @@ I'm sorry baby ko sa lahat ng pagkukulang at mga pagkakamali ko po sayo. I know 
       ctx.save();
       ctx.shadowColor = '#4a8cbd';
       ctx.shadowBlur = 14;
-      // jar body
       ctx.beginPath();
       ctx.ellipse(W/2, H*0.66, W*0.2, H*0.16, 0, 0, Math.PI*2);
       ctx.fillStyle = 'rgba(18, 35, 60, 0.3)';
@@ -456,14 +449,12 @@ I'm sorry baby ko sa lahat ng pagkukulang at mga pagkakamali ko po sayo. I know 
       ctx.strokeStyle = '#7aa9d9';
       ctx.lineWidth = 2.2;
       ctx.stroke();
-      // neck
       ctx.beginPath();
       ctx.ellipse(W/2, H*0.49, W*0.11, H*0.045, 0, 0, Math.PI*2);
       ctx.fillStyle = 'rgba(20, 40, 70, 0.35)';
       ctx.fill();
       ctx.strokeStyle = '#8fb3e3';
       ctx.stroke();
-      // lid
       ctx.beginPath();
       ctx.ellipse(W/2, H*0.45, W*0.12, H*0.035, 0, 0, Math.PI*2);
       ctx.fillStyle = '#2e4d73';
@@ -487,6 +478,16 @@ I'm sorry baby ko sa lahat ng pagkukulang at mga pagkakamali ko po sayo. I know 
         ctx.arc(f.x-1, f.y-1, f.size*0.4, 0, 2*Math.PI);
         ctx.fillStyle = '#e3f0ff';
         ctx.fill();
+        // rising trail (if releasing)
+        if (currentState === STATE.RELEASING) {
+          ctx.shadowBlur = 12;
+          ctx.globalAlpha = 0.3;
+          ctx.beginPath();
+          ctx.arc(f.x - f.vx*2, f.y - f.vy*2, f.size*0.5, 0, 2*Math.PI);
+          ctx.fillStyle = f.color;
+          ctx.fill();
+          ctx.globalAlpha = 1.0;
+        }
       }
       ctx.shadowBlur = 0;
     }
@@ -500,7 +501,6 @@ I'm sorry baby ko sa lahat ng pagkukulang at mga pagkakamali ko po sayo. I know 
         ctx.arc(p.x, p.y, p.size, 0, 2*Math.PI);
         ctx.fillStyle = p.color;
         ctx.fill();
-        // core
         ctx.shadowBlur = p.blur*1.3;
         ctx.beginPath();
         ctx.arc(p.x-1, p.y-1, p.size*0.5, 0, 2*Math.PI);
@@ -513,56 +513,46 @@ I'm sorry baby ko sa lahat ng pagkukulang at mga pagkakamali ko po sayo. I know 
 
     function draw() {
       drawBackground();
-      
       if (currentState === STATE.JAR || currentState === STATE.RELEASING) {
         drawJar();
         drawFireflies();
       }
-      
       if (currentState === STATE.FIREWORKS || currentState === STATE.DONE) {
         drawFireworks();
-        // small litmatch vibe
         ctx.font = "300 12px 'Segoe UI'";
         ctx.fillStyle = '#b0d2ff';
         ctx.shadowColor = '#3f93ff';
-        ctx.shadowBlur = 10
+        ctx.shadowBlur = 10;
+        ctx.textAlign = "center";
+        ctx.fillText('💙 13 months · litmatch 💙', W/2, H-20);
         ctx.shadowBlur = 0;
       }
     }
 
-    // ---- animation loop (throttled for smoothness) ----
     function updateLoop() {
       if (currentState === STATE.JAR) updateJar();
       else if (currentState === STATE.RELEASING) updateReleasing();
       else if (currentState === STATE.FIREWORKS) updateFireworks();
-      
       draw();
       requestAnimationFrame(updateLoop);
     }
 
-    // ---- event handlers ----
     function handleCanvasClick() {
       if (currentState === STATE.JAR) releaseJar();
     }
 
-    // ---- initialization ----
     function init() {
       fullReset();
-      messageContent.innerText = ''; 
-      
+      messageContent.innerText = '';
       canvas.addEventListener('click', handleCanvasClick);
-      
       restartBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         fullReset();
         letterOverlay.classList.remove('show');
       });
-      
       closeLetterBtn.addEventListener('click', () => {
         letterOverlay.classList.remove('show');
       });
-      
-      // start animation
       updateLoop();
     }
 
