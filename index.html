@@ -221,24 +221,24 @@ I'm sorry baby ko sa lahat ng pagkukulang at mga pagkakamali ko po sayo. I know 
     const STATE = { JAR: 0, RELEASING: 1, FIREWORKS: 2, DONE: 3 };
     let currentState = STATE.JAR;
     
-    let fireflies = [];            // only active ones (not yet exploded)
+    let fireflies = [];
     let fireworksParticles = [];
     let releaseTriggered = false;
     let finaleTriggered = false;
     let letterShown = false;
-    let explosionCooldown = 0;     // frames between auto pops
+    let explosionCooldown = 0;
     
-    // colors (blue theme + colorful fireworks)
     const fireworkColors = [
-      '#4da6ff', '#6eb5ff', '#2a7fff', // blues
-      '#b38bff', '#d9b0ff', '#c77dff', // purples
-      '#ff99cc', '#ffb3d9', '#ff85c2', // pinks
-      '#7ae2ff', '#a0d6ff', '#5fc3ff', // light blues
+      '#4da6ff', '#6eb5ff', '#2a7fff',
+      '#b38bff', '#d9b0ff', '#c77dff',
+      '#ff99cc', '#ffb3d9', '#ff85c2',
+      '#7ae2ff', '#a0d6ff', '#5fc3ff',
       '#f4a2c9', '#d0b2ff', '#ffcc99'
     ];
 
     const GRAVITY = 0.06;
     const FIREFLY_COUNT = 13;
+    const POP_THRESHOLD = H * 0.2; // height at which fireflies explode
 
     const rand = (min, max) => Math.random() * (max - min) + min;
     const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
@@ -332,53 +332,49 @@ I'm sorry baby ko sa lahat ng pagkukulang at mga pagkakamali ko po sayo. I know 
       currentState = STATE.RELEASING;
       releaseTriggered = true;
       instructionEl.style.opacity = '0.5';
-      // give each firefly an upward boost and random horizontal drift
+      // Give each firefly a steady upward velocity (no gravity applied later)
       fireflies.forEach(f => {
-        f.vy = rand(-2.2, -1.8);   // strong upward
-        f.vx += rand(-0.3, 0.3);
+        f.vy = rand(-1.8, -1.2); // negative = upward
+        f.vx += rand(-0.2, 0.2);
       });
     }
 
-    // ---- UPDATE: sequential popping ----
+    // UPDATED: fireflies rise continuously, pop when high enough
     function updateReleasing() {
-      // move fireflies upward
+      // Move fireflies upward (no gravity, just constant upward + small drag)
       for (let f of fireflies) {
         f.x += f.vx;
         f.y += f.vy;
-        // slight gravity / drag
-        f.vy += 0.015;
+        // slight drag to keep horizontal motion calm
         f.vx *= 0.995;
+        // very slight upward acceleration to ensure they keep rising
+        f.vy += 0.008; // small boost instead of gravity
         f.phase += 0.02;
       }
 
-      // check for fireflies that are high enough to pop
-      const toExplode = [];
-      for (let f of fireflies) {
-        if (!f.exploded && f.y < H * 0.28) {
-          toExplode.push(f);
-        }
-      }
-
-      // pop them one per frame (or with small cooldown) for sequential effect
-      if (toExplode.length > 0 && explosionCooldown <= 0) {
-        // pick the highest one first (or just first)
-        const f = toExplode[0];
+      // Check which fireflies are ready to pop (above threshold)
+      const candidates = fireflies.filter(f => !f.exploded && f.y < POP_THRESHOLD);
+      
+      if (candidates.length > 0 && explosionCooldown <= 0) {
+        // Pop the highest one (lowest y) for a nice sequential effect
+        candidates.sort((a, b) => a.y - b.y);
+        const f = candidates[0];
         f.exploded = true;
         createExplosion(f.x, f.y, f.color);
-        explosionCooldown = 6; // frames between pops
+        explosionCooldown = 8; // frames between pops
       }
+      
       if (explosionCooldown > 0) explosionCooldown--;
 
-      // remove exploded fireflies from array
+      // Remove exploded fireflies
       fireflies = fireflies.filter(f => !f.exploded);
 
-      // if all fireflies gone, transition to FIREWORKS (but wait for particles)
+      // When all fireflies have popped, move to FIREWORKS state and trigger finale
       if (fireflies.length === 0 && currentState === STATE.RELEASING) {
         currentState = STATE.FIREWORKS;
-        // small delay then finale
         setTimeout(() => {
           if (!finaleTriggered) triggerFinale();
-        }, 800);
+        }, 600);
       }
     }
 
@@ -420,7 +416,6 @@ I'm sorry baby ko sa lahat ng pagkukulang at mga pagkakamali ko po sayo. I know 
       }
     }
 
-    // ---- drawing (blue theme) ----
     function drawBackground() {
       const grad = ctx.createLinearGradient(0,0,0,H);
       grad.addColorStop(0, '#07101e');
@@ -478,10 +473,9 @@ I'm sorry baby ko sa lahat ng pagkukulang at mga pagkakamali ko po sayo. I know 
         ctx.arc(f.x-1, f.y-1, f.size*0.4, 0, 2*Math.PI);
         ctx.fillStyle = '#e3f0ff';
         ctx.fill();
-        // rising trail (if releasing)
         if (currentState === STATE.RELEASING) {
           ctx.shadowBlur = 12;
-          ctx.globalAlpha = 0.3;
+          ctx.globalAlpha = 0.25;
           ctx.beginPath();
           ctx.arc(f.x - f.vx*2, f.y - f.vy*2, f.size*0.5, 0, 2*Math.PI);
           ctx.fillStyle = f.color;
@@ -524,7 +518,7 @@ I'm sorry baby ko sa lahat ng pagkukulang at mga pagkakamali ko po sayo. I know 
         ctx.shadowColor = '#3f93ff';
         ctx.shadowBlur = 10;
         ctx.textAlign = "center";
-        ctx.fillText('💙 13 months · litmatch 💙', W/2, H-20);
+        ctx.fillText('💙 1 year and 1 month 💙', W/2, H-20);
         ctx.shadowBlur = 0;
       }
     }
